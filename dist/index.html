@@ -9,6 +9,16 @@
 <body>
   <div id="app">APPLICATION CONTENT</div>
 
+	<script>
+  // Redirect https/ to non-SSL to avoid mixed-content errors when we make
+  // remote calls to servers that don't support SSL.
+  window.onload = function() {
+		if (window.location.protocol==="https:") {
+			window.location.href = 'http:' + window.location.href.substring(
+					window.location.protocol.length);
+		}
+	}
+	</script>
   <script>__REACT_DEVTOOLS_GLOBAL_HOOK__ = parent.__REACT_DEVTOOLS_GLOBAL_HOOK__</script>
   <script type="text/javascript" src="assets/app.js"></script>
 </body>

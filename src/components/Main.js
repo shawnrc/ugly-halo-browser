@@ -3,6 +3,27 @@ require('styles/App.css');
 
 import React from 'react';
 
+class ThresholdFilter {
+	constructor(field, title, op) {
+		this.title = title
+		this.field = field
+		this.threshold = 0
+		this.op = op
+		console.log(this.title, this.field, this.op)
+	}
+
+	enabled = () => this.threshold > 0
+
+	matchesFilter = (server) => {
+		switch (this.op) {
+			case ThresholdFilter.MIN:
+				return server[this.field] >= this.threshold;
+			case ThresholdFilter.MAX:
+				return server[this.field] <= this.threshold;
+		}
+	}
+}
+
 class SearchFilter {
 	isTransient = false;
 
@@ -22,6 +43,8 @@ class SearchFilter {
       : server[this.field].toLowerCase().includes(this.searchTerm.toLowerCase())
 			  != this.invertSelection
 }
+ThresholdFilter.MIN = 0
+ThresholdFilter.MAX = 1
 
 class ToggleFilter {
 	enabled = () => this.engaged
@@ -159,6 +182,8 @@ class AppComponent extends React.Component {
 		  variant: new SearchFilter('variant', 'Game Variant'),
 			map: new SearchFilter('map', 'Map'),
 			nameSearch: new SearchFilter('name', 'Server Name'),
+			maxServerSize: new ThresholdFilter('maxPlayers', 'Max server size', ThresholdFilter.MAX),
+			minServerSize: new ThresholdFilter('maxPlayers', 'Min server size', ThresholdFilter.MIN)
 		},
 		servers: {},
 
@@ -195,29 +220,38 @@ class AppComponent extends React.Component {
 
 	onSearchUpdate =
 		(filter, event) => {
-			var new_state = Object.assign({ filters: this.state.filters });
-			new_state.filters[filter].searchTerm = event.target.value
+			var new_state = { filters: this.state.filters };
+			new_state.filters[filter].searchTerm = event.target.value;
 			this.setState(new_state);
 		}
 
 	onToggleUpdate =
 		(filter, event) => {
-			var new_state = Object.assign({ filters: this.state.filters });
-			new_state.filters[filter].engaged = event.target.checked
+			var new_state = { filters: this.state.filters };
+			new_state.filters[filter].engaged = event.target.checked;
 			this.setState(new_state);
 		}
 
 	onInvertUpdate =
 		(filter, event) => {
-			var new_state = Object.assign({ filters: this.state.filters });
-			new_state.filters[filter].invertSelection = event.target.checked
+			var new_state = { filters: this.state.filters };
+			new_state.filters[filter].invertSelection = event.target.checked;
 			this.setState(new_state);
 		}
 
 	onCaseUpdate = 
 		(filter, event) => {
-			var new_state = Object.assign({ filters: this.state.filters });
-			new_state.filters[filter].caseSensitive = event.target.checked
+			var new_state = { filters: this.state.filters };
+			new_state.filters[filter].caseSensitive = event.target.checked;
+			this.setState(new_state);
+		}
+
+	onThresholdUpdate =
+		(filter, event) => {
+			var new_state = { filters: this.state.filters };
+			const maybe_threshold = parseInt(event.target.value);
+			new_state.filters[filter].threshold =
+				isNaN(maybe_threshold) ? 0 : maybe_threshold;
 			this.setState(new_state);
 		}
 
@@ -267,10 +301,27 @@ class AppComponent extends React.Component {
 					  />
 				    <br />
 			    </div>);
-		const filters = Object.values(this.state.filters)
+		const thresholds = Object.entries(this.state.filters)
+		  .filter(column => column[1] instanceof ThresholdFilter)
+		  .map(
+				(column) =>
+				  <tr key={column[0]}>
+				    <td>{column[1].title}: </td>
+				    <td>
+							<input
+								type="number"
+				        id={'threshold-' + column[0]}
+								value={column[1].threshold}
+								onChange={this.onThresholdUpdate.bind(this, column[0])}
+				        min="0"
+							/>
+						</td>
+				  </tr>);
+
+		const activeFilters = Object.values(this.state.filters)
 		  .filter(filter => filter.enabled());
 		const servers = Object.entries(this.state.servers)
-			.filter(server => this.shouldRender(server[1], filters))
+			.filter(server => this.shouldRender(server[1], activeFilters))
 		  .sort((lhs, rhs) =>	this.compareFn(lhs[1], rhs[1]))
 			.map((server) =>
 				<Server key={server[0]} server={server[1]} />);
@@ -285,7 +336,7 @@ class AppComponent extends React.Component {
     return (
 			<div>
 			<span>{ totalPlayers } players on { Object.keys(this.state.servers).length } servers</span>
-			<table><tbody>{ searchSelectors }</tbody></table>
+			<table><tbody>{ searchSelectors }{ thresholds }</tbody></table>
 			<div>{ flags }</div>
 			<button onClick={this.reload.bind(this)}>Reload</button>
 		  <table id='servers'><tbody>

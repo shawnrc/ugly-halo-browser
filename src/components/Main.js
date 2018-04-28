@@ -1,35 +1,7 @@
 require('normalize.css/normalize.css');
 require('styles/App.css');
-require('react-select/dist/react-select.css')
 
 import React from 'react';
-import Select from 'react-select';
-//import ServerList from './ServerList';
-
-class CategoricalFilter {
-	isTransient = true;
-
-	constructor(title, field) {
-		this.title = title;
-		this.field = field;
-		this.allValues = [];
-		this.filterValues = [];
-		this.invertSelection = false;
-  }
-
-	get options() {
-		return Object.entries(this.allValues).
-			filter((entry) => entry[1] > 0).
-			map((entry) => ({
-				value: entry[0],
-				label: entry[0]
-			}));
-	}
-
-  matchesFilter = (server) =>
-    (this.filterValues.length == 0) ||
-      !!this.filterValues.find((el) => el.value == server[this.field])
-}
 
 class SearchFilter {
 	isTransient = false;
@@ -39,28 +11,20 @@ class SearchFilter {
 		this.field = field
   	this.searchTerm = '';
   	this.invertSelection = false;
+		this.caseSensitive = false;
   }
 
+	enabled = () => this.searchTerm.length != 0
+
   matchesFilter = (server) =>
-    (this.searchTerm.length == 0) ||
-      server[this.field].toLowerCase().includes(this.searchTerm)
-}
-
-class ThresholdFilter {
-	isTransient = true;
-
-	constructor() {
-		this.thresholdValue = 0;
-		this.rawText = '';
-	}
-
-	matchesFilter = (server) => {
-		return (this.thresholdValue == 0) ||
-			(server.ping <= this.thresholdValue)
-	}
+		this.caseSensitive ?
+      server[this.field].includes(this.searchTerm) != this.invertSelection
+      : server[this.field].toLowerCase().includes(this.searchTerm.toLowerCase())
+			  != this.invertSelection
 }
 
 class ToggleFilter {
+	enabled = () => this.engaged
 }
 
 class FullFilter extends ToggleFilter {
@@ -72,7 +36,7 @@ class FullFilter extends ToggleFilter {
 	}
 
 	matchesFilter = (server) =>
-		!this.engaged || (server.numPlayers < server.maxPlayers)
+		(server.numPlayers < server.maxPlayers)
 }
 
 class PrivateFilter extends ToggleFilter {
@@ -84,7 +48,7 @@ class PrivateFilter extends ToggleFilter {
 	}
 
 	matchesFilter = (server) =>
-		!this.engaged || !server.passworded
+		!server.passworded
 }
 
 class EmptyFilter extends ToggleFilter {
@@ -96,7 +60,7 @@ class EmptyFilter extends ToggleFilter {
 	}
 
 	matchesFilter = (server) =>
-		!this.engaged || (server.numPlayers > 0)
+		(server.numPlayers > 0)
 }
 
 class DedicatedServerFilter extends ToggleFilter {
@@ -117,7 +81,7 @@ function Server(props) {
 		<tr>
 		  <td>{ server.ip }</td>
 		  <td>{ server.name }</td>
-		  <td>{ server.ping }</td>
+		  <td>{ server.map }</td>
 		  <td>{ server.variant }</td>
 		  <td>{ server.numPlayers + '/' + server.maxPlayers }</td>
   	</tr>);
@@ -145,7 +109,6 @@ class AppComponent extends React.Component {
 						ip: s,
 						variant: '',
 						name: '',
-						ping: null,
 						loaded: false
 					});
 					this.setState({servers: new_servers});
@@ -177,7 +140,6 @@ class AppComponent extends React.Component {
 		var server = update.servers[ip];
 		Object.assign(server, response);
 		server.numPlayers = parseInt(server.numPlayers)
-		update.totalPlayers = this.state.totalPlayers + server.numPlayers
 		server.maxPlayers = parseInt(server.maxPlayers)
 		server.loaded = true;
 	  this.setState(update);
@@ -187,6 +149,7 @@ class AppComponent extends React.Component {
 		filters: {
 			loaded: {
 				matchesFilter: (server) => !!server.loaded,
+				enabled: () => true,
 				invertSelection: false
 			},
 			full: new FullFilter(false),
@@ -194,19 +157,18 @@ class AppComponent extends React.Component {
 			dedicated: new DedicatedServerFilter(false),
 			noprivate: new PrivateFilter(true),
 		  variant: new SearchFilter('variant', 'Game Variant'),
+			map: new SearchFilter('map', 'Map'),
 			nameSearch: new SearchFilter('name', 'Server Name'),
-			pingThreshold: new ThresholdFilter()
 		},
-		totalPlayers: 0,
 		servers: {},
 
 		sortProp: '',
 		sortInvert: -1
   }
 
-	shouldRender = (server) => {
-		for (var column of Object.values(this.state.filters)) {
-			if (!column.matchesFilter(server) && !column.invertSelection) {
+	shouldRender = (server, filters) => {
+		for (var filter of filters) {
+			if (!filter.matchesFilter(server)) {
 				return false;
 			}
 		}
@@ -231,105 +193,114 @@ class AppComponent extends React.Component {
 		else return 0;
 	}
 
-  onNewFiltersSelected =
-      (column, selectedFilters) => {
-				var new_state = { filters: this.state.filters };
-				Object.assign(new_state.filters[column], {
-					filterValues: selectedFilters
-				});
-        this.setState(new_state)
-      }
-
 	onSearchUpdate =
 		(filter, event) => {
-			console.log(filter);
 			var new_state = Object.assign({ filters: this.state.filters });
-			Object.assign(new_state.filters[filter], {
-				searchTerm: event.target.value
-			});
+			new_state.filters[filter].searchTerm = event.target.value
 			this.setState(new_state);
 		}
 
 	onToggleUpdate =
 		(filter, event) => {
 			var new_state = Object.assign({ filters: this.state.filters });
-			Object.assign(new_state.filters[filter], {
-				engaged: event.target.checked
-			});
+			new_state.filters[filter].engaged = event.target.checked
 			this.setState(new_state);
 		}
 
-	onPingThresholdUpdate =
-		(event) => {
-			var parsed = parseInt(event.target.value, 10);
-			if (event.target.value.length > 0 && isNaN(parsed)) return;
+	onInvertUpdate =
+		(filter, event) => {
+			var new_state = Object.assign({ filters: this.state.filters });
+			new_state.filters[filter].invertSelection = event.target.checked
+			this.setState(new_state);
+		}
 
-			var new_state = Object.assign({}, { filters: this.state.filters });
-			Object.assign(new_state.filters.pingThreshold, {
-				rawText: event.target.value,
-				thresholdValue: parseInt(event.target.value, 10) || 0
-			});
-  		this.setState(new_state);
+	onCaseUpdate = 
+		(filter, event) => {
+			var new_state = Object.assign({ filters: this.state.filters });
+			new_state.filters[filter].caseSensitive = event.target.checked
+			this.setState(new_state);
 		}
 
   render() {
-		const columnSelectors = Object.entries(this.state.filters).
-			filter((column) => column[1] instanceof CategoricalFilter).
-			map(
-		  	(column) =>
- 		  	  <Select
-		  	    key = { column[0] }
-       	    placeholder = {'Select ' + column[1].title + 's' }
-       	    closeOnSelect= { false }
-       	    multi
-       	    onChange = { this.onNewFiltersSelected.bind(this, column[0]) }
-       	    options = { column[1].options }
-       	    value = { column[1].filterValues }
-		  	  />
-		  	);
 		const searchSelectors = Object.entries(this.state.filters)
 			.filter((column) => column[1] instanceof SearchFilter)
 			.map(
 				(column) =>
-				  <input type="text"
-				    key={column[0]}
-				    placeholder={'Search by ' + column[1].title}
-				    value={column[1].searchTerm}
-				    onChange={this.onSearchUpdate.bind(this, column[0])}
-				  />);
+				  <tr key={column[0]}>
+				    <td>{column[1].title}: </td>
+				    <td>
+					   <input type="text"
+				 	     placeholder={'Search by ' + column[1].title}
+				 	     value={column[1].searchTerm}
+				 	     onChange={this.onSearchUpdate.bind(this, column[0])}
+				 	   />
+				    </td>
+				    <td>
+						  <label htmlFor={'toggle-invert-' + column[0]}>Invert selection</label>
+			    	  <input
+				  	    id={'toggle-invert-' + column[0]}
+				  	    type="checkbox"
+						    checked={column[1].invertSelection}
+						    onChange={this.onInvertUpdate.bind(this, column[0])}
+				  	  />
+				    </td>
+				    <td>
+					   <label htmlFor={'case-sensitive-' + column[0]}>Case sensitive</label>
+			   	   <input
+				 	     id={'case-sensitive-' + column[0]}
+				 	     type="checkbox"
+				 	     checked={column[1].caseSensitive}
+				 	     onChange={this.onCaseUpdate.bind(this, column[0])}
+				 	   />
+				    </td>
+				  </tr>);
 		const flags = Object.entries(this.state.filters)
 		  .filter(column => column[1] instanceof ToggleFilter)
 		  .map(
 				(column) =>
-				  <span key={column[0]}>
-				    <label>{column[1].name}</label>
+				  <div key={column[0]}>
+				    <label htmlFor={'toggle-filter-' + column[0]}>{column[1].name}</label>
   				  <input type="checkbox"
-					    key={column[0]}
-					    label={column[1].name}
+				      id={'toggle-filter-' + column[0]}
 					    checked={column[1].engaged}
 					    onChange={this.onToggleUpdate.bind(this, column[0])}
 					  />
-			    </span>);
+				    <br />
+			    </div>);
+		const filters = Object.values(this.state.filters)
+		  .filter(filter => filter.enabled());
 		const servers = Object.entries(this.state.servers)
-			.filter(server => this.shouldRender(server[1]))
+			.filter(server => this.shouldRender(server[1], filters))
 		  .sort((lhs, rhs) =>	this.compareFn(lhs[1], rhs[1]))
 			.map((server) =>
 				<Server key={server[0]} server={server[1]} />);
+		const totalPlayers = Object.values(this.state.servers)
+		  .reduce(
+				((acc, s) => 
+				  s.loaded && !isNaN(s.numPlayers)
+				    ? acc + s.numPlayers
+			      : acc),
+		    0);
 			  
     return (
 			<div>
-			<span>{ this.state.totalPlayers } players on { Object.keys(this.state.servers).length } servers</span>
-			<div>{ columnSelectors }</div>
-			<div>{ searchSelectors }</div>
+			<span>{ totalPlayers } players on { Object.keys(this.state.servers).length } servers</span>
+			<table><tbody>{ searchSelectors }</tbody></table>
 			<div>{ flags }</div>
 			<button onClick={this.reload.bind(this)}>Reload</button>
 		  <table id='servers'><tbody>
 			  <tr>
 				  <th>IP</th>
-			 	  <th>Name</th>
-			 	  <th>Ping</th>
+			 	  <th onClick={this.setSort.bind(this, 'name')}>
+			      Name
+			      <SortArrow target='name' actual={this.state.sortProp} dir={this.state.sortInvert} />
+			    </th>
+			 	  <th onClick={this.setSort.bind(this, 'map')}>
+			      Map
+			      <SortArrow target='map' actual={this.state.sortProp} dir={this.state.sortInvert} />
+			    </th>
 			 	  <th onClick={this.setSort.bind(this, 'variant')}>
-			      Game Type
+			      Game Variant
 			      <SortArrow target='variant' actual={this.state.sortProp} dir={this.state.sortInvert} />
 			    </th>
 			 	  <th onClick={this.setSort.bind(this, 'numPlayers')}>

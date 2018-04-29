@@ -122,7 +122,9 @@ class AppComponent extends React.Component {
 	}
 
 	reload() {
-		this.setState({servers: {}, numPlayers: 0});
+		if (this.state.reloadsStarted > this.state.reloadsFinished) return;
+
+		this.setState({reloadsStarted: this.state.reloadsStarted + 1, servers: {}});
 		fetch('http://158.69.166.144:8080/list')
 		  .then(res => res.json())
 			.then(
@@ -135,6 +137,7 @@ class AppComponent extends React.Component {
 						loaded: false
 					});
 					this.setState({servers: new_servers});
+					setTimeout(() => this.setState({reloadsFinished: this.state.reloadsFinished + 1}), 500)
 					for (const [ip, server] of Object.entries(this.state.servers)) {
 						server.fetch = server.fetch || this.startFetch(ip);
 					}
@@ -169,6 +172,9 @@ class AppComponent extends React.Component {
 	}
 
   state = {
+		reloadsStarted: 0,
+		reloadsFinished: 0,
+
 		filters: {
 			loaded: {
 				matchesFilter: (server) => !!server.loaded,

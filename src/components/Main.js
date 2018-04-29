@@ -98,6 +98,49 @@ class DedicatedServerFilter extends ToggleFilter {
 		!this.engaged || !!server.isDedicated
 }
 
+function NumberSelector(props) {
+	return (
+		<input
+		  type="number"
+		  id={props.id}
+		  min={props.min}
+			value={props.value}
+			onChange={function (e) { props.onChange(props.id, e) }}
+		/>);
+}
+
+function SearchFilterInputs(props) {
+	return (
+    <tr>
+	    <td>{props.filter.title}: </td>
+	    <td>
+		   <input type="text"
+	 	     placeholder={'Search by ' + props.filter.title}
+	 	     value={props.filter.searchTerm}
+	 	     onChange={function (e) { props.onSearchTermChange(props.id, e) }}
+	 	   />
+	    </td>
+	    <td>
+			  <label htmlFor={'toggle-invert-' + props.id}>Invert selection</label>
+    	  <input
+	  	    id={'toggle-invert-' + props.id}
+	  	    type="checkbox"
+			    checked={props.filter.invertSelection}
+					onChange={function (e) { props.onInvertChange(props.id, e) }}
+	  	  />
+	    </td>
+	    <td>
+		   <label htmlFor={'case-sensitive-' + props.id}>Case sensitive</label>
+   	   <input
+	 	     id={'case-sensitive-' + props.id}
+	 	     type="checkbox"
+	 	     checked={props.filter.caseSensitive}
+	 	     onChange={function (e) { props.onCaseSensitivityChange(props.id, e) }}
+	 	   />
+	    </td>
+	  </tr>);
+}
+
 function Server(props) {
 	const server = props.server;
 	return(
@@ -116,10 +159,58 @@ function SortArrow(props) {
 	else return (<span>{String.fromCharCode(8657)}</span>);
 }
 
-class AppComponent extends React.Component {
+var SortableHeading = React.createClass({
+	shouldComponentUpdate(nextProps) {
+		if (this.props.actual != this.props.target && nextProps.actual != nextProps.target) {
+			return false;
+		}
+		return true;
+	},
+
+	render() {
+		return (
+			<th onClick={function (e) { this.props.callback(this.props.target, e) }.bind(this) }>
+			  {this.props.children}
+				<SortArrow
+			    target={this.props.target}
+					actual={this.props.actual}
+					dir={this.props.dir} />
+		  </th>);
+	}
+})
+
+var AppComponent = React.createClass({
+  getInitialState() {
+		return {
+			reloadsStarted: 0,
+			reloadsFinished: 0,
+	
+			filters: {
+				loaded: {
+					matchesFilter: (server) => !!server.loaded,
+					enabled: () => true,
+					invertSelection: false
+				},
+				full: new FullFilter(false),
+				empty: new EmptyFilter(true),
+				dedicated: new DedicatedServerFilter(false),
+				noprivate: new PrivateFilter(true),
+			  variant: new SearchFilter('variant', 'Game Variant'),
+				map: new SearchFilter('map', 'Map'),
+				nameSearch: new SearchFilter('name', 'Server Name'),
+				maxServerSize: new ThresholdFilter('maxPlayers', 'Max server size', ThresholdFilter.MAX),
+				minServerSize: new ThresholdFilter('maxPlayers', 'Min server size', ThresholdFilter.MIN)
+			},
+			servers: {},
+	
+			sortProp: '',
+			sortInvert: -1
+		};
+  },
+
 	componentDidMount() {
 		this.reload();
-	}
+	},
 
 	reload() {
 		if (this.state.reloadsStarted > this.state.reloadsFinished) return;
@@ -148,16 +239,16 @@ class AppComponent extends React.Component {
 				(res) => {
 					this.setState({officialServers: res.map(s => s.address)});
 				});
-	}
+	},
 
-	startFetch = (ip) => {
+	startFetch(ip) {
 		return fetch('http://' + ip)
 			.then(resp => resp.json())
 			.then(
 				this.processResponse.bind(this, ip));
-	}
+	},
 
-	processResponse = (ip, response) => {
+	processResponse(ip, response) {
 		if (!this.state.servers.hasOwnProperty(ip)) {
 			return;
 		}
@@ -169,44 +260,18 @@ class AppComponent extends React.Component {
 		server.maxPlayers = parseInt(server.maxPlayers)
 		server.loaded = true;
 	  this.setState(update);
-	}
+	},
 
-  state = {
-		reloadsStarted: 0,
-		reloadsFinished: 0,
-
-		filters: {
-			loaded: {
-				matchesFilter: (server) => !!server.loaded,
-				enabled: () => true,
-				invertSelection: false
-			},
-			full: new FullFilter(false),
-			empty: new EmptyFilter(true),
-			dedicated: new DedicatedServerFilter(false),
-			noprivate: new PrivateFilter(true),
-		  variant: new SearchFilter('variant', 'Game Variant'),
-			map: new SearchFilter('map', 'Map'),
-			nameSearch: new SearchFilter('name', 'Server Name'),
-			maxServerSize: new ThresholdFilter('maxPlayers', 'Max server size', ThresholdFilter.MAX),
-			minServerSize: new ThresholdFilter('maxPlayers', 'Min server size', ThresholdFilter.MIN)
-		},
-		servers: {},
-
-		sortProp: '',
-		sortInvert: -1
-  }
-
-	shouldRender = (server, filters) => {
+	shouldRender(server, filters) {
 		for (var filter of filters) {
 			if (!filter.matchesFilter(server)) {
 				return false;
 			}
 		}
 		return true;
-	}
+	},
 
-	setSort = (sortProp, e) => {
+	setSort(sortProp, e) {
 		e.preventDefault();
 		var sortChanged = sortProp != this.state.sortProp;
 		this.setState({
@@ -214,86 +279,71 @@ class AppComponent extends React.Component {
 			sortInvert: sortChanged ?
 			    -1 : -1 * this.state.sortInvert
 		});
-	}
+	},
 
-	compareFn = (lhs, rhs) => {
+	compareFn(lhs, rhs) {
 		const {sortProp, sortInvert} = this.state;
 		if (!sortProp) return 0;
-		if (lhs[sortProp] < rhs[sortProp]) return -1 * sortInvert;
-		else if (lhs[sortProp] > rhs[sortProp]) return sortInvert;
-		else return 0;
-	}
 
-	onSearchUpdate =
-		(filter, event) => {
-			var new_state = { filters: this.state.filters };
-			new_state.filters[filter].searchTerm = event.target.value;
-			this.setState(new_state);
-		}
+		if (lhs[sortProp].toLowerCase) {
+			const lhsLower = lhs[sortProp].toLowerCase();
+			const rhsLower = rhs[sortProp].toLowerCase();
 
-	onToggleUpdate =
-		(filter, event) => {
-			var new_state = { filters: this.state.filters };
-			new_state.filters[filter].engaged = event.target.checked;
-			this.setState(new_state);
+		  if (lhsLower < rhsLower) return -1 * sortInvert;
+		  else if (lhsLower > rhsLower) return sortInvert;
+			else return 0;
+		} else {
+		  if (lhs[sortProp] < rhs[sortProp]) return -1 * sortInvert;
+		  else if (lhs[sortProp] > rhs[sortProp]) return sortInvert;
+			else return 0;
 		}
+	},
 
-	onInvertUpdate =
-		(filter, event) => {
-			var new_state = { filters: this.state.filters };
-			new_state.filters[filter].invertSelection = event.target.checked;
-			this.setState(new_state);
-		}
+	onSearchUpdate(filter, event) {
+		var new_state = { filters: this.state.filters };
+		new_state.filters[filter].searchTerm = event.target.value;
+		this.setState(new_state);
+	},
 
-	onCaseUpdate = 
-		(filter, event) => {
-			var new_state = { filters: this.state.filters };
-			new_state.filters[filter].caseSensitive = event.target.checked;
-			this.setState(new_state);
-		}
+	onToggleUpdate(filter, event) {
+		var new_state = { filters: this.state.filters };
+		new_state.filters[filter].engaged = event.target.checked;
+		this.setState(new_state);
+	},
 
-	onThresholdUpdate =
-		(filter, event) => {
-			var new_state = { filters: this.state.filters };
-			const maybe_threshold = parseInt(event.target.value);
-			new_state.filters[filter].threshold =
-				isNaN(maybe_threshold) ? 0 : maybe_threshold;
-			this.setState(new_state);
-		}
+	onInvertUpdate(filter, event) {
+		var new_state = { filters: this.state.filters };
+		new_state.filters[filter].invertSelection = event.target.checked;
+		this.setState(new_state);
+	},
+
+	onCaseUpdate(filter, event) {
+		var new_state = { filters: this.state.filters };
+		new_state.filters[filter].caseSensitive = event.target.checked;
+		this.setState(new_state);
+	},
+
+	onThresholdUpdate(filter, event) {
+		var new_state = { filters: this.state.filters };
+		const maybe_threshold = parseInt(event.target.value);
+		new_state.filters[filter].threshold =
+			isNaN(maybe_threshold) ? 0 : maybe_threshold;
+		this.setState(new_state);
+	},
 
   render() {
 		const searchSelectors = Object.entries(this.state.filters)
 			.filter((column) => column[1] instanceof SearchFilter)
 			.map(
 				(column) =>
-				  <tr key={column[0]}>
-				    <td>{column[1].title}: </td>
-				    <td>
-					   <input type="text"
-				 	     placeholder={'Search by ' + column[1].title}
-				 	     value={column[1].searchTerm}
-				 	     onChange={this.onSearchUpdate.bind(this, column[0])}
-				 	   />
-				    </td>
-				    <td>
-						  <label htmlFor={'toggle-invert-' + column[0]}>Invert selection</label>
-			    	  <input
-				  	    id={'toggle-invert-' + column[0]}
-				  	    type="checkbox"
-						    checked={column[1].invertSelection}
-						    onChange={this.onInvertUpdate.bind(this, column[0])}
-				  	  />
-				    </td>
-				    <td>
-					   <label htmlFor={'case-sensitive-' + column[0]}>Case sensitive</label>
-			   	   <input
-				 	     id={'case-sensitive-' + column[0]}
-				 	     type="checkbox"
-				 	     checked={column[1].caseSensitive}
-				 	     onChange={this.onCaseUpdate.bind(this, column[0])}
-				 	   />
-				    </td>
-				  </tr>);
+				  <SearchFilterInputs
+				    key={column[0]}
+				    id={column[0]}
+				    filter={column[1]}
+				    onSearchTermChange={this.onSearchUpdate}
+				    onInvertChange={this.onInvertUpdate}
+				    onCaseSensitivityChange={this.onCaseUpdate}
+				  />);
 		const flags = Object.entries(this.state.filters)
 		  .filter(column => column[1] instanceof ToggleFilter)
 		  .map(
@@ -314,13 +364,11 @@ class AppComponent extends React.Component {
 				  <tr key={column[0]}>
 				    <td>{column[1].title}: </td>
 				    <td>
-							<input
-								type="number"
-				        id={'threshold-' + column[0]}
-								value={column[1].threshold}
-								onChange={this.onThresholdUpdate.bind(this, column[0])}
+				      <NumberSelector
+				        id={column[0]}
+				        value={column[1].threshold}
 				        min="0"
-							/>
+				        onChange={this.onThresholdUpdate} />
 						</td>
 				  </tr>);
 
@@ -344,32 +392,44 @@ class AppComponent extends React.Component {
 			<span>{ totalPlayers } players on { Object.keys(this.state.servers).length } servers</span>
 			<table><tbody>{ searchSelectors }{ thresholds }</tbody></table>
 			<div>{ flags }</div>
-			<button onClick={this.reload.bind(this)}>Reload</button>
+			<button onClick={this.reload}>Reload</button>
 		  <table id='servers'><tbody>
 			  <tr>
 				  <th>IP</th>
-			 	  <th onClick={this.setSort.bind(this, 'name')}>
+			    <SortableHeading
+			      target='name'
+			      actual={this.state.sortProp}
+			      dir={this.state.sortInvert}
+			      callback={this.setSort}>
 			      Name
-			      <SortArrow target='name' actual={this.state.sortProp} dir={this.state.sortInvert} />
-			    </th>
-			 	  <th onClick={this.setSort.bind(this, 'map')}>
+			    </SortableHeading>
+			    <SortableHeading
+			      target='map'
+			      actual={this.state.sortProp}
+			      dir={this.state.sortInvert}
+			      callback={this.setSort}>
 			      Map
-			      <SortArrow target='map' actual={this.state.sortProp} dir={this.state.sortInvert} />
-			    </th>
-			 	  <th onClick={this.setSort.bind(this, 'variant')}>
+			    </SortableHeading>
+			    <SortableHeading
+			      target='variant'
+			      actual={this.state.sortProp}
+			      dir={this.state.sortInvert}
+			      callback={this.setSort}>
 			      Game Variant
-			      <SortArrow target='variant' actual={this.state.sortProp} dir={this.state.sortInvert} />
-			    </th>
-			 	  <th onClick={this.setSort.bind(this, 'numPlayers')}>
+			    </SortableHeading>
+			    <SortableHeading
+			      target='numPlayers'
+			      actual={this.state.sortProp}
+			      dir={this.state.sortInvert}
+			      callback={this.setSort}>
 			      Players
-			      <SortArrow target='numPlayers' actual={this.state.sortProp} dir={this.state.sortInvert} />
-			    </th>
+			    </SortableHeading>
 			  </tr>
 			  { servers }
 			</tbody></table>
 			</div>
 		);
   }
-}
+})
 
 export default AppComponent;

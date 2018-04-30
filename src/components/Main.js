@@ -1,102 +1,9 @@
 require('normalize.css/normalize.css');
 require('styles/App.css');
 
+import * as Filters from './Filters.js'
 import React from 'react';
-
-class ThresholdFilter {
-	constructor(field, title, op) {
-		this.title = title
-		this.field = field
-		this.threshold = 0
-		this.op = op
-		console.log(this.title, this.field, this.op)
-	}
-
-	enabled = () => this.threshold > 0
-
-	matchesFilter = (server) => {
-		switch (this.op) {
-			case ThresholdFilter.MIN:
-				return server[this.field] >= this.threshold;
-			case ThresholdFilter.MAX:
-				return server[this.field] <= this.threshold;
-		}
-	}
-}
-
-class SearchFilter {
-	isTransient = false;
-
-	constructor(field, title) {
-		this.title = title
-		this.field = field
-  	this.searchTerm = '';
-  	this.invertSelection = false;
-		this.caseSensitive = false;
-  }
-
-	enabled = () => this.searchTerm.length != 0
-
-  matchesFilter = (server) =>
-		this.caseSensitive ?
-      server[this.field].includes(this.searchTerm) != this.invertSelection
-      : server[this.field].toLowerCase().includes(this.searchTerm.toLowerCase())
-			  != this.invertSelection
-}
-ThresholdFilter.MIN = 0
-ThresholdFilter.MAX = 1
-
-class ToggleFilter {
-	enabled = () => this.engaged
-}
-
-class FullFilter extends ToggleFilter {
-	name = 'Hide full'
-
-	constructor(engaged) {
-		super();
-		this.engaged = engaged
-	}
-
-	matchesFilter = (server) =>
-		(server.numPlayers < server.maxPlayers)
-}
-
-class PrivateFilter extends ToggleFilter {
-	name = 'Hide passworded'
-
-	constructor(engaged) {
-		super();
-		this.engaged = engaged
-	}
-
-	matchesFilter = (server) =>
-		!server.passworded
-}
-
-class EmptyFilter extends ToggleFilter {
-	name = 'Hide empty'
-
-	constructor(engaged) {
-		super();
-		this.engaged = engaged
-	}
-
-	matchesFilter = (server) =>
-		(server.numPlayers > 0)
-}
-
-class DedicatedServerFilter extends ToggleFilter {
-	name = 'Show dedicated servers only'
-
-	constructor(engaged) {
-		super();
-		this.engaged = engaged
-	}
-
-	matchesFilter = (server) =>
-		!this.engaged || !!server.isDedicated
-}
+import SortableHeading from './Heading.js'
 
 function NumberSelector(props) {
 	return (
@@ -153,32 +60,6 @@ function Server(props) {
   	</tr>);
 }
 
-function SortArrow(props) {
-	if (props.target != props.actual) return null;
-	if (props.dir == -1) return (<span>{String.fromCharCode(8659)}</span>);
-	else return (<span>{String.fromCharCode(8657)}</span>);
-}
-
-var SortableHeading = React.createClass({
-	shouldComponentUpdate(nextProps) {
-		if (this.props.actual != this.props.target && nextProps.actual != nextProps.target) {
-			return false;
-		}
-		return true;
-	},
-
-	render() {
-		return (
-			<th onClick={function (e) { this.props.callback(this.props.target, e) }.bind(this) }>
-			  {this.props.children}
-				<SortArrow
-			    target={this.props.target}
-					actual={this.props.actual}
-					dir={this.props.dir} />
-		  </th>);
-	}
-})
-
 var AppComponent = React.createClass({
   getInitialState() {
 		return {
@@ -191,15 +72,17 @@ var AppComponent = React.createClass({
 					enabled: () => true,
 					invertSelection: false
 				},
-				full: new FullFilter(false),
-				empty: new EmptyFilter(true),
-				dedicated: new DedicatedServerFilter(false),
-				noprivate: new PrivateFilter(true),
-			  variant: new SearchFilter('variant', 'Game Variant'),
-				map: new SearchFilter('map', 'Map'),
-				nameSearch: new SearchFilter('name', 'Server Name'),
-				maxServerSize: new ThresholdFilter('maxPlayers', 'Max server size', ThresholdFilter.MAX),
-				minServerSize: new ThresholdFilter('maxPlayers', 'Min server size', ThresholdFilter.MIN)
+				full: new Filters.FullFilter(false),
+				empty: new Filters.EmptyFilter(true),
+				dedicated: new Filters.DedicatedServerFilter(false),
+				noprivate: new Filters.PrivateFilter(true),
+			  variant: new Filters.SearchFilter('variant', 'Game Variant'),
+				map: new Filters.SearchFilter('map', 'Map'),
+				nameSearch: new Filters.SearchFilter('name', 'Server Name'),
+				maxServerSize: new Filters.ThresholdFilter(
+					'maxPlayers', 'Max server size', Filters.ThresholdFilter.MAX),
+				minServerSize: new Filters.ThresholdFilter(
+					'maxPlayers', 'Min server size', Filters.ThresholdFilter.MIN)
 			},
 			servers: {},
 	
@@ -333,7 +216,7 @@ var AppComponent = React.createClass({
 
   render() {
 		const searchSelectors = Object.entries(this.state.filters)
-			.filter((column) => column[1] instanceof SearchFilter)
+			.filter((column) => column[1] instanceof Filters.SearchFilter)
 			.map(
 				(column) =>
 				  <SearchFilterInputs
@@ -345,7 +228,7 @@ var AppComponent = React.createClass({
 				    onCaseSensitivityChange={this.onCaseUpdate}
 				  />);
 		const flags = Object.entries(this.state.filters)
-		  .filter(column => column[1] instanceof ToggleFilter)
+		  .filter(column => column[1] instanceof Filters.ToggleFilter)
 		  .map(
 				(column) =>
 				  <div key={column[0]}>
@@ -358,7 +241,7 @@ var AppComponent = React.createClass({
 				    <br />
 			    </div>);
 		const thresholds = Object.entries(this.state.filters)
-		  .filter(column => column[1] instanceof ThresholdFilter)
+		  .filter(column => column[1] instanceof Filters.ThresholdFilter)
 		  .map(
 				(column) =>
 				  <tr key={column[0]}>
@@ -381,7 +264,7 @@ var AppComponent = React.createClass({
 				<Server key={server[0]} server={server[1]} />);
 		const totalPlayers = Object.values(this.state.servers)
 		  .reduce(
-				((acc, s) => 
+				((acc, s) =>
 				  s.loaded && !isNaN(s.numPlayers)
 				    ? acc + s.numPlayers
 			      : acc),

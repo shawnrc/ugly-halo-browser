@@ -3,7 +3,8 @@ require('styles/App.css');
 
 import * as Filters from './Filters.js'
 import React from 'react';
-import SortableHeading from './Heading.js'
+import SortableHeadings from './Heading.js'
+import Dewrito from '../Dewrito.js'
 
 function NumberSelector(props) {
 	return (
@@ -60,9 +61,11 @@ function Server(props) {
   	</tr>);
 }
 
-var AppComponent = React.createClass({
-  getInitialState() {
-		return {
+class AppComponent extends React.Component {
+  constructor(props) {
+		super(props);
+		this.dewrito = new Dewrito()
+		this.state = {
 			reloadsStarted: 0,
 			reloadsFinished: 0,
 	
@@ -89,11 +92,26 @@ var AppComponent = React.createClass({
 			sortProp: '',
 			sortInvert: -1
 		};
-  },
+
+		// Bound methods, for use as callbacks.
+		this.reload = this.reload.bind(this);
+		this.setSort = this.setSort.bind(this);
+		this.onSearchUpdate = this.onSearchUpdate.bind(this);
+		this.onToggleUpdate = this.onToggleUpdate.bind(this);
+		this.onInvertUpdate = this.onInvertUpdate.bind(this);
+		this.onCaseUpdate = this.onCaseUpdate.bind(this);
+		this.onThresholdUpdate = this.onThresholdUpdate.bind(this);
+
+		// Lifecycle
+		this.dewrito.onExit(function() {
+			this.setState({servers: {}});
+		}.bind(this));
+		this.dewrito.onLoad(this.reload);
+  }
 
 	componentDidMount() {
 		this.reload();
-	},
+	}
 
 	reload() {
 		if (this.state.reloadsStarted > this.state.reloadsFinished) return;
@@ -111,7 +129,11 @@ var AppComponent = React.createClass({
 						loaded: false
 					});
 					this.setState({servers: new_servers});
-					setTimeout(() => this.setState({reloadsFinished: this.state.reloadsFinished + 1}), 500)
+					setTimeout(
+						() =>
+						  this.setState(
+								{reloadsFinished: this.state.reloadsFinished + 1}),
+						500)
 					for (const [ip, server] of Object.entries(this.state.servers)) {
 						server.fetch = server.fetch || this.startFetch(ip);
 					}
@@ -122,14 +144,14 @@ var AppComponent = React.createClass({
 				(res) => {
 					this.setState({officialServers: res.map(s => s.address)});
 				});
-	},
+	}
 
 	startFetch(ip) {
 		return fetch('http://' + ip)
 			.then(resp => resp.json())
 			.then(
 				this.processResponse.bind(this, ip));
-	},
+	}
 
 	processResponse(ip, response) {
 		if (!this.state.servers.hasOwnProperty(ip)) {
@@ -143,7 +165,7 @@ var AppComponent = React.createClass({
 		server.maxPlayers = parseInt(server.maxPlayers)
 		server.loaded = true;
 	  this.setState(update);
-	},
+	}
 
 	shouldRender(server, filters) {
 		for (var filter of filters) {
@@ -152,17 +174,7 @@ var AppComponent = React.createClass({
 			}
 		}
 		return true;
-	},
-
-	setSort(sortProp, e) {
-		e.preventDefault();
-		var sortChanged = sortProp != this.state.sortProp;
-		this.setState({
-			sortProp: sortProp,
-			sortInvert: sortChanged ?
-			    -1 : -1 * this.state.sortInvert
-		});
-	},
+	}
 
 	compareFn(lhs, rhs) {
 		const {sortProp, sortInvert} = this.state;
@@ -180,31 +192,41 @@ var AppComponent = React.createClass({
 		  else if (lhs[sortProp] > rhs[sortProp]) return sortInvert;
 			else return 0;
 		}
-	},
+	}
+
+	setSort(sortProp, e) {
+		e.preventDefault();
+		var sortChanged = sortProp != this.state.sortProp;
+		this.setState({
+			sortProp: sortProp,
+			sortInvert: sortChanged ?
+			    -1 : -1 * this.state.sortInvert
+		});
+	}
 
 	onSearchUpdate(filter, event) {
 		var new_state = { filters: this.state.filters };
 		new_state.filters[filter].searchTerm = event.target.value;
 		this.setState(new_state);
-	},
+	}
 
 	onToggleUpdate(filter, event) {
 		var new_state = { filters: this.state.filters };
 		new_state.filters[filter].engaged = event.target.checked;
 		this.setState(new_state);
-	},
+	}
 
 	onInvertUpdate(filter, event) {
 		var new_state = { filters: this.state.filters };
 		new_state.filters[filter].invertSelection = event.target.checked;
 		this.setState(new_state);
-	},
+	}
 
 	onCaseUpdate(filter, event) {
 		var new_state = { filters: this.state.filters };
 		new_state.filters[filter].caseSensitive = event.target.checked;
 		this.setState(new_state);
-	},
+	}
 
 	onThresholdUpdate(filter, event) {
 		var new_state = { filters: this.state.filters };
@@ -212,7 +234,7 @@ var AppComponent = React.createClass({
 		new_state.filters[filter].threshold =
 			isNaN(maybe_threshold) ? 0 : maybe_threshold;
 		this.setState(new_state);
-	},
+	}
 
   render() {
 		const searchSelectors = Object.entries(this.state.filters)
@@ -273,46 +295,29 @@ var AppComponent = React.createClass({
     return (
 			<div>
 			<span>{ totalPlayers } players on { Object.keys(this.state.servers).length } servers</span>
+			<this.dewrito.ExitBrowserButton />
 			<table><tbody>{ searchSelectors }{ thresholds }</tbody></table>
 			<div>{ flags }</div>
 			<button onClick={this.reload}>Reload</button>
 		  <table id='servers'><tbody>
 			  <tr>
 				  <th>IP</th>
-			    <SortableHeading
-			      target='name'
-			      actual={this.state.sortProp}
-			      dir={this.state.sortInvert}
-			      callback={this.setSort}>
-			      Name
-			    </SortableHeading>
-			    <SortableHeading
-			      target='map'
-			      actual={this.state.sortProp}
-			      dir={this.state.sortInvert}
-			      callback={this.setSort}>
-			      Map
-			    </SortableHeading>
-			    <SortableHeading
-			      target='variant'
-			      actual={this.state.sortProp}
-			      dir={this.state.sortInvert}
-			      callback={this.setSort}>
-			      Game Variant
-			    </SortableHeading>
-			    <SortableHeading
-			      target='numPlayers'
-			      actual={this.state.sortProp}
-			      dir={this.state.sortInvert}
-			      callback={this.setSort}>
-			      Players
-			    </SortableHeading>
+			  <SortableHeadings
+			    headers={{
+						'name': 'Name',
+						'map': 'Map',
+						'variant': 'Game Variant',
+						'numPlayers': 'Players'
+					}}
+					current={this.state.sortProp}
+			    dir={this.state.sortInvert}
+			    callback={this.setSort} />
 			  </tr>
 			  { servers }
 			</tbody></table>
 			</div>
 		);
   }
-})
+}
 
 export default AppComponent;

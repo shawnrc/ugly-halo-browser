@@ -1,32 +1,66 @@
 'use strict';
 
-const path = require('path');
-const args = require('minimist')(process.argv.slice(2));
+const path = require('path')
 
-// List of allowed environments
-const allowedEnvs = ['dev', 'dist', 'test'];
+module.exports =  {
+	entry: [
+		'./src/index.js'
+	],
+  output : {
+    path : path.join(__dirname, 'dist/assets'),
+    filename : 'app.js',
+    publicPath : '/assets/'
+  },
+  devServer : {
+    contentBase : './dist',
+		inline: true,
+		publicPath: '/assets'
+  },
+	devtool: 'source-map',
 
-// Set the correct environment
-let env;
-if (args._.length > 0 && args._.indexOf('start') !== -1) {
-  env = 'test';
-} else if (args.env) {
-  env = args.env;
-} else {
-  env = 'dev';
+	module: {
+		rules: [
+			// Pass all Javascript through ESLint, then Babel
+			{
+				test: /\.(js|jsx)$/,
+				enforce: 'pre',
+				exclude: /node_modules/,
+				use: ['eslint-loader']
+			}, {
+				test: /\.(js|jsx)$/,
+				exclude: /node_modules/,
+				use: ['babel-loader']
+			},
+
+			// PostCSS loader
+			{
+				test: /\.css$/,
+				use: [
+					{ loader: 'style-loader' },
+//					{ loader: 'css-loader' },
+					{
+						loader: 'postcss-loader',
+						options: {
+							plugins: function () {
+								return [require('autoprefixer')({browsers: ['last 2 versions', 'ie >=8']})];
+							}
+						}
+					}
+				]
+			}
+		]
+	},
+	resolve: {
+		// Don't require specifying ".js" on imports
+		extensions: ['*', '.js', '.jsx'],
+
+		// Import src/ paths to the top-level pseudo-directory
+		modules: [__dirname, 'node_modules'],
+		alias: {
+			components: 'src/components',
+			styles: 'src/styles'
+		}
+	},
 }
-process.env.REACT_WEBPACK_ENV = env;
 
-/**
- * Build the webpack configuration
- * @param  {String} wantedEnv The wanted environment
- * @return {Object} Webpack config
- */
-function buildConfig(wantedEnv) {
-  let isValid = wantedEnv && wantedEnv.length > 0 && allowedEnvs.indexOf(wantedEnv) !== -1;
-  let validEnv = isValid ? wantedEnv : 'dev';
-  let config = require(path.join(__dirname, 'cfg/' + validEnv));
-  return config;
-}
-
-module.exports = buildConfig(env);
+console.log(module.exports.resolve);

@@ -6,13 +6,16 @@ function SortArrow(props) {
 	else return (<span>{String.fromCharCode(8657)}</span>);
 }
 
-var SortableHeading = React.createClass({
+class SortableHeading extends React.Component {
+	constructor(props) {
+		super(props);
+	}
 	shouldComponentUpdate(nextProps) {
 		if (this.props.actual != this.props.target && nextProps.actual != nextProps.target) {
 			return false;
 		}
 		return true;
-	},
+	}
 
 	render() {
 		return (
@@ -24,6 +27,19 @@ var SortableHeading = React.createClass({
 					dir={this.props.dir} />
 		  </th>);
 	}
-})
+}
 
-export default SortableHeading;
+function SortableHeadings(props) {
+	return Object.entries(props.headers)
+	  .map((header) =>
+			<SortableHeading
+			  key={header[0]}
+			  target={header[0]}
+			  actual={props.current}
+			  dir={props.dir}
+			  callback={props.callback}>
+			  {header[1]}
+			</SortableHeading>);
+}
+
+export default SortableHeadings;

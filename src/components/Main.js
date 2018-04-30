@@ -5,6 +5,7 @@ import * as Filters from './Filters.js'
 import React from 'react';
 import SortableHeadings from './Heading.js'
 import Dewrito from '../Dewrito.js'
+import Clipboard from 'react-clipboard.js'
 
 function NumberSelector(props) {
 	return (
@@ -51,9 +52,10 @@ function SearchFilterInputs(props) {
 
 function Server(props) {
 	const server = props.server;
+	const connectString = `server.connect ${server.ip}`;
 	return(
 		<tr>
-		  <td>{ server.ip }</td>
+      <td><Clipboard data-clipboard-text={connectString}>📋</Clipboard>&nbsp;{ server.ip }</td>
 		  <td>{ server.name }</td>
 		  <td>{ server.map }</td>
 		  <td>{ server.variant }</td>
@@ -68,7 +70,7 @@ class AppComponent extends React.Component {
 		this.state = {
 			reloadsStarted: 0,
 			reloadsFinished: 0,
-	
+
 			filters: {
 				loaded: {
 					matchesFilter: (server) => !!server.loaded,
@@ -88,7 +90,7 @@ class AppComponent extends React.Component {
 					'maxPlayers', 'Min server size', Filters.ThresholdFilter.MIN)
 			},
 			servers: {},
-	
+
 			sortProp: '',
 			sortInvert: -1
 		};
@@ -291,7 +293,7 @@ class AppComponent extends React.Component {
 				    ? acc + s.numPlayers
 			      : acc),
 		    0);
-			  
+
     return (
 			<div>
 			<span>{ totalPlayers } players on { Object.keys(this.state.servers).length } servers</span>
